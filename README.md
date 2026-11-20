@@ -4,6 +4,10 @@ A Paseo plugin that keeps a table of provider, model and effort choices per tier
 ("set"), assigns sets to workspaces and projects, and can refuse agent creations that
 were made from an outdated table.
 
+![Model routing screen, showing demo data](docs/model-routing.png)
+
+*Demo data.*
+
 ## What it does
 
 - **Sets.** `model-routing.md` holds named sets. Each set has one table of tiers (for example
