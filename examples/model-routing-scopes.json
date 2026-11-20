@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "global": {
+    "enforce": false
+  },
+  "projects": {
+    "prj-example": {
+      "set": "careful",
+      "enforce": true
+    }
+  },
+  "workspaces": {
+    "ws-example": {
+      "set": "fast",
+      "enforce": true
+    }
+  }
+}
