@@ -47,6 +47,8 @@ export const routingStateSchema = z.object({
   parseError: z.string().nullable(),
   providers: z.array(providerOptionSchema),
   providersError: z.string().nullable(),
+  /** True while the file does not exist. `routing` is null and `revision` is `MISSING_ROUTING_REVISION`. */
+  missing: z.boolean().optional(),
 });
 
 export type Route = z.infer<typeof routeSchema>;
@@ -54,6 +56,9 @@ export type Preset = z.infer<typeof presetSchema>;
 export type Routing = z.infer<typeof routingSchema>;
 export type ProviderOption = z.infer<typeof providerOptionSchema>;
 export type RoutingState = z.infer<typeof routingStateSchema>;
+
+/** Revision reported while `model-routing.md` does not exist. */
+export const MISSING_ROUTING_REVISION = "missing";
 
 export const readRoutingRpc = defineRpc({
   name: "routing.read",
@@ -64,6 +69,13 @@ export const readRoutingRpc = defineRpc({
 export const saveRoutingRpc = defineRpc({
   name: "routing.save",
   input: z.object({ revision: z.string(), routing: routingSchema }),
+  output: routingStateSchema,
+});
+
+/** Create a starting `model-routing.md`. Refused when the file already exists; never overwrites. */
+export const createRoutingRpc = defineRpc({
+  name: "routing.create",
+  input: z.object({}),
   output: routingStateSchema,
 });
 
@@ -78,8 +90,3 @@ export const LEAD_TIER = "lead";
 
 /** Preset names the md editor accepts (also the `active:` line and scope references). */
 export const PRESET_NAME = /^[A-Za-z0-9_-]+$/;
-
-/** DeepSeek on Mistral rejects `medium` although Paseo lists it. */
-export function allowedEffort(provider: string, effort: string): boolean {
-  return !(provider.startsWith("deepseek-") && effort === "medium");
-}

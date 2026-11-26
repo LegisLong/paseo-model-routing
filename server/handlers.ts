@@ -1,18 +1,18 @@
 /// <reference types="node" />
-import { readFile, rename, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { PluginHandlerContext } from "@getpaseo/plugin/server";
 import type { ProviderOption, Routing, RoutingState } from "../shared/routing";
-import { allowedEffort, NO_PROVIDER } from "../shared/routing";
+import { MISSING_ROUTING_REVISION, NO_PROVIDER } from "../shared/routing";
 import type { ResolveOutput, Scopes, ScopesState, SetOp } from "../shared/scopes";
-import { applyRouting, parseRouting } from "./routing-file";
+import { defaultRoutingFile } from "./paths";
+import { applyRouting, parseRouting, starterRouting } from "./routing-file";
 import { readScopesFile, resolveEffective, revisionOf, roleView, writeScopesFile } from "./scopes-file";
 import { applySetOp, assertNoReferencedRemoval } from "./sets";
 
-// Routing file the guard and the screen read. Defaults to Paseo's home; override with the env var.
-export const ROUTING_FILE =
-  process.env.PASEO_MODEL_ROUTING_FILE || join(homedir(), ".paseo", "model-routing.md");
+// Routing file the guard and the screen read. Defaults to the daemon's Paseo home (PASEO_HOME, else
+// ~/.paseo); override with the env var.
+export const ROUTING_FILE = process.env.PASEO_MODEL_ROUTING_FILE || defaultRoutingFile(process.env);
 
 // Scope assignments, beside the routing file unless overridden.
 export const SCOPES_FILE =
@@ -87,9 +87,7 @@ async function listProviders(context: PluginHandlerContext): Promise<ProviderOpt
               model.thinkingOptions ??
               (model.thinkingSet !== undefined ? thinkingSets[model.thinkingSet]?.options : undefined) ??
               []
-            )
-              .filter((option) => allowedEffort(entry.provider, option.id))
-              .map((option) => ({ id: option.id, label: option.label })),
+            ).map((option) => ({ id: option.id, label: option.label })),
           })),
       };
     })
@@ -97,13 +95,21 @@ async function listProviders(context: PluginHandlerContext): Promise<ProviderOpt
 }
 
 async function readState(context: PluginHandlerContext): Promise<RoutingState> {
-  const raw = await readFile(ROUTING_FILE);
+  let raw: Buffer | null = null;
+  try {
+    raw = await readFile(ROUTING_FILE);
+  } catch (error) {
+    // A new install has no file yet: say so, and let the screen offer to create one.
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
   let routing: Routing | null = null;
   let parseError: string | null = null;
-  try {
-    routing = parseRouting(raw.toString("utf8"));
-  } catch (error) {
-    parseError = error instanceof Error ? error.message : String(error);
+  if (raw) {
+    try {
+      routing = parseRouting(raw.toString("utf8"));
+    } catch (error) {
+      parseError = error instanceof Error ? error.message : String(error);
+    }
   }
   let providers: ProviderOption[] = [];
   let providersError: string | null = null;
@@ -114,16 +120,34 @@ async function readState(context: PluginHandlerContext): Promise<RoutingState> {
   }
   return {
     path: ROUTING_FILE,
-    revision: revisionOf(raw),
+    revision: raw ? revisionOf(raw) : MISSING_ROUTING_REVISION,
     routing,
     parseError,
     providers,
     providersError,
+    ...(raw ? {} : { missing: true }),
   };
 }
 
 export function readRouting(_input: Record<string, never>, context: PluginHandlerContext) {
   return readState(context);
+}
+
+export function createRouting(_input: Record<string, never>, context: PluginHandlerContext): Promise<RoutingState> {
+  return serialized(async () => {
+    await mkdir(dirname(ROUTING_FILE), { recursive: true });
+    try {
+      // `wx` fails when the file exists, so a file made since the screen loaded is never overwritten.
+      await writeFile(ROUTING_FILE, starterRouting(), { encoding: "utf8", flag: "wx" });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        throw new Error("model-routing.md already exists. Reload to see it; nothing was changed.");
+      }
+      throw error;
+    }
+    console.log(`Created ${ROUTING_FILE}`);
+    return readState(context);
+  });
 }
 
 function validate(routing: Routing, providers: ProviderOption[]): void {
@@ -136,9 +160,6 @@ function validate(routing: Routing, providers: ProviderOption[]): void {
     for (const route of preset.routes) {
       const where = `${preset.name}/${route.tier}`;
       if (route.provider === NO_PROVIDER) continue;
-      if (!allowedEffort(route.provider, route.effort)) {
-        throw new Error(`${where}: ${route.provider} rejects effort ${route.effort}.`);
-      }
       // Providers missing from the snapshot are kept as written: discovery can lag or
       // the provider may be disabled for now. Only check models of known providers.
       const provider = known.get(route.provider);

@@ -17,21 +17,39 @@ were made from an outdated table.
   workspace or project. A workspace entry wins over its project, and a project wins over the
   global default.
 - **Screen.** A "Model routing" screen in the Paseo sidebar edits sets and assignments.
-  A save is refused when the file changed since it was loaded.
+  A save is refused when the file changed since it was loaded. See [First run](#first-run).
 - **Guard.** In a scope where an assignment has `enforce: true`, a Supervisor creating a Lead,
   or a Lead creating a Peer, must pass the current `routing-rev` label for the role's rows.
-  Otherwise the creation is refused with the current rows and the label to add.
+  Otherwise the creation is refused with the current rows and the label to add. Roles come from
+  provider-id suffixes (`-supervisor`, `-lead`); see [the guard](#the-guard-behavior-and-limits).
 - **CLI.** `bin/routing.mjs` prints the effective set for a workspace or project, and edits one
   row with a revision check. It is for source checkouts only (see below).
 
 ## Requirements
 
-- Paseo with the plugin API `>=0.14.0` (see `paseo-plugin.json`). Tested on Paseo 0.16.2.
-- Node.js with TypeScript type stripping, for the CLI and the tests (tested on Node 26).
+- Paseo `>=0.16.2` (see `paseo-plugin.json`). Tested on Paseo 0.16.2 and 0.17.4. Earlier versions are not tested.
+- Node.js with TypeScript type stripping, for the CLI and the tests only (tested on Node 26). The plugin
+  itself needs no Node setup beyond the daemon's.
+- The plugin has no runtime dependencies of its own: `@getpaseo/plugin`, `zod`, `react`, `react-native`
+  and `@tanstack/react-query` come from Paseo, so installing it runs no build step.
 
 ## Install
 
-From a clean checkout:
+From Git, pinned to a release tag:
+
+```
+paseo plugin add git:Meron-Labs/paseo-model-routing --ref v0.1.0
+paseo plugin ls
+```
+
+`plugin ls` should show `model-routing` as `running` with no error. Add `--home <daemon home>` to
+both commands for a daemon that does not use `~/.paseo`. If the daemon already has a `model-routing`
+entry, install fails with `Plugin ID "model-routing" is already configured`; remove it first with
+`paseo plugin remove model-routing`.
+
+Installing a plugin runs its code unsandboxed on the daemon host. Install only code you have read.
+
+For development, install from a checkout instead:
 
 ```
 npm ci
@@ -40,25 +58,38 @@ paseo plugin reload model-routing --home <daemon home>
 paseo plugin ls --home <daemon home>
 ```
 
-`plugin ls` should show `model-routing` as `running` and `yes`, with the checkout path as its source.
-If the daemon already has a `model-routing` entry, install fails with `Plugin ID "model-routing" is already configured`.
-Remove the entry first with `paseo plugin remove model-routing --home <daemon home>`.
+Here `plugin ls` shows the checkout path as the source.
 
-Installing a plugin runs its code unsandboxed on the daemon host. Install only code you have read.
-
-Rollback: `paseo plugin remove model-routing --home <daemon home>`. Before any change to a daemon that
+Rollback: `paseo plugin remove model-routing`. Before any change to a daemon that
 already has routing files, copy `model-routing.md` and `model-routing-scopes.json` (if present) to a
 timestamped backup, and restore from that backup on rollback. Do not delete the scopes file.
 
+## First run
+
+A new install has no `model-routing.md`. Open "Model routing" in the sidebar: the screen shows the
+path it looks for and a "Create starting file" button. It writes a file with one set, `default`, and
+one tier, `routine`, that names no provider yet. Pick providers and models on the screen and save.
+The button never overwrites an existing file.
+
+To start from your own file instead, put a `model-routing.md` at that path, for example a copy of
+[`examples/model-routing.md`](examples/model-routing.md), and reload the screen. The example names
+placeholder providers (`example-peer`); change them to providers your daemon has. A set that names a
+provider the daemon does not list is kept as written.
+
 ## Files and environment
+
+By default both files live in the daemon's Paseo home: `PASEO_HOME` (which the daemon sets from
+`--home` for its plugins and agents), else `~/.paseo`.
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
-| `PASEO_MODEL_ROUTING_FILE` | Routing file (sets and `active:`) | `~/.paseo/model-routing.md` |
+| `PASEO_MODEL_ROUTING_FILE` | Routing file (sets and `active:`) | `model-routing.md` in the Paseo home |
 | `PASEO_MODEL_ROUTING_SCOPES_FILE` | Assignments file | `model-routing-scopes.json` beside the routing file |
 
-Set the variables in the environment of the daemon that loads the plugin. Other paths are not read.
-A missing scopes file means no assignments and nothing enforced.
+The two variables win over the Paseo home. Set them in the environment of the daemon that loads the
+plugin. Other paths are not read. A missing scopes file means no assignments and nothing enforced.
+The CLI uses the same rule, so an agent started by the daemon finds the daemon's files without any
+variable.
 
 ## Agent CLI (source checkout only)
 
@@ -119,6 +150,12 @@ the revision label, and the child's model is whatever the creator requested.
 
 ## The guard: behavior and limits
 
+- **Roles come from provider ids.** The creator's role is read from the suffix of its provider id:
+  `-supervisor` creates Leads (rows of the `lead` tier), `-lead` creates Peers (all other rows).
+  Any other id, such as `claude` or `codex`, has no role and its creations are always allowed.
+  So the guard does something only when you name your providers with these suffixes (for example
+  custom providers `claude-supervisor` and `claude-lead`). Without them, the plugin is a table
+  editor, a scope assignment screen and a CLI; `enforce` has no effect.
 - It checks one thing: that the creator's `routing-rev` label equals the revision of the role's rows
   in the effective set for the child's workspace. It does not check which model was chosen.
 - It refuses only fresh, interactive creations with a parent in an enforced scope. Other paths
@@ -126,7 +163,7 @@ the revision label, and the child's model is whatever the creator requested.
 - It fails open: any internal error or a timeout of 3 seconds lets the creation through.
 - The refusal text names the scope, the set, the revision and the rows, and says that nothing was created.
 - Reloading the plugin drops plugin tools for a session that is mid-turn, until that session's next prompt.
-  Idle sessions keep running; the notes from the isolated test daemon recorded no interrupt.
+  Idle sessions keep running.
 - It is a freshness check, not a policy: a creator that reads a current table can still choose any model.
 - Global enforcement is refused in this version. Enforce per workspace or per project.
 

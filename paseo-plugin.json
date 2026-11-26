@@ -1,8 +1,9 @@
 {
   "id": "model-routing",
   "name": "Model routing",
-  "media": [],
+  "description": "Keeps provider, model and effort tables per tier, assigns them to workspaces and projects, and can refuse agent creations made from an outdated table.",
+  "media": ["docs/model-routing.png"],
   "requirements": {
-    "paseo": ">=0.14.0"
+    "paseo": ">=0.16.2"
   }
 }

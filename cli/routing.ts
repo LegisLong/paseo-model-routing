@@ -1,9 +1,8 @@
 /// <reference types="node" />
 import { readFile, rename, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { defaultRoutingFile } from "../server/paths";
 import type { Route, Routing } from "../shared/routing";
-import { allowedEffort } from "../shared/routing";
 import type { Role } from "../shared/scopes";
 import { resolveEffective } from "../shared/scopes";
 import { applyRouting, parseRouting } from "../server/routing-file";
@@ -16,7 +15,7 @@ export type Env = Record<string, string | undefined>;
 export type Result = { code: number; out: Record<string, unknown> };
 
 export function routingPath(env: Env): string {
-  return env.PASEO_MODEL_ROUTING_FILE || join(homedir(), ".paseo", "model-routing.md");
+  return env.PASEO_MODEL_ROUTING_FILE || defaultRoutingFile(env);
 }
 
 export function scopesPath(env: Env): string {
@@ -130,9 +129,6 @@ export async function setRouteCommand(argv: string[], env: Env): Promise<Result>
   const routing: Routing = parseRouting(raw);
   const preset = routing.presets.find((candidate) => candidate.name === setName);
   if (!preset) return fail({ error: "unknown_set", hint: `No set ${setName}.` });
-  if (!allowedEffort(flags.provider, flags.effort)) {
-    return fail({ error: "effort", hint: `${flags.provider} rejects effort ${flags.effort}.` });
-  }
   const existing = preset.routes.findIndex((row) => row.tier === tier);
   const route: Route = {
     tier,

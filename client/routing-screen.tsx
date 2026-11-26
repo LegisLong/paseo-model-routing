@@ -9,6 +9,7 @@ import { readRoutingRpc, saveRoutingRpc } from "../shared/routing";
 import type { Scopes, ScopesState, SetOp } from "../shared/scopes";
 import { manageSetRpc, readScopesRpc, saveScopesRpc } from "../shared/scopes";
 import { Assignments } from "./assignments";
+import { MissingFile } from "./missing-file";
 import type { Snapshot } from "./scope-model";
 import {
   draftStatus,
@@ -97,6 +98,7 @@ function ScreenBody({ narrow }: { narrow: boolean }) {
       </View>
     );
   }
+  if (routingState?.missing) return <MissingFile state={routingState} queryKey={ROUTING_KEY} />;
   if (!routingState || !scopesState || !routingDraft.base || !scopesDraft.base) return <Loading />;
 
   /** Project and workspace names, to show scopes by name in messages. */

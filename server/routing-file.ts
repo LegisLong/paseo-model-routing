@@ -151,6 +151,40 @@ function renderPresets(routing: Routing): string[] {
   return out;
 }
 
+/**
+ * Contents of a new `model-routing.md`: one set `default` with a `routine` tier that names no
+ * provider yet. Providers and models are chosen on the screen, from what the daemon offers.
+ */
+export function starterRouting(): string {
+  const routing: Routing = {
+    active: "default",
+    presets: [
+      {
+        name: "default",
+        summary: "Starting set. Pick a provider and model for each tier.",
+        routes: [{ tier: "routine", provider: "", model: "", effort: "", note: "choose a provider and model" }],
+      },
+    ],
+  };
+  const template = [
+    "# Model routing",
+    "",
+    "Routing table for the Model routing plugin. Edit it on the plugin's screen in Paseo or by hand.",
+    "",
+    "active: default",
+    "",
+    "## Quick routing",
+    "",
+    "Lead sees this before creating a Peer. It is a copy of the active set.",
+    "",
+    TABLE_HEADER,
+    "",
+    "## Presets",
+    "",
+  ].join("\n");
+  return applyRouting(template, routing);
+}
+
 /** Replace the plugin-owned parts of `text` with `routing`; keep all other lines. */
 export function applyRouting(text: string, routing: Routing): string {
   const eol = text.includes("\r\n") ? "\r\n" : "\n";

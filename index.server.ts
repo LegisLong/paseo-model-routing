@@ -1,6 +1,7 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { createRoutingGuard, type OpenRequest } from "./server/guard";
 import {
+  createRouting,
   manageSet,
   readRouting,
   readScopes,
@@ -10,11 +11,12 @@ import {
   saveScopes,
   SCOPES_FILE,
 } from "./server/handlers";
-import { readRoutingRpc, saveRoutingRpc } from "./shared/routing";
+import { createRoutingRpc, readRoutingRpc, saveRoutingRpc } from "./shared/routing";
 import { manageSetRpc, readScopesRpc, resolveScopeRpc, saveScopesRpc } from "./shared/scopes";
 
 export default function contribute(server: PluginServerContext) {
   server.handle(readRoutingRpc, readRouting);
+  server.handle(createRoutingRpc, createRouting);
   server.handle(saveRoutingRpc, saveRouting);
   server.handle(readScopesRpc, readScopes);
   server.handle(saveScopesRpc, saveScopes);
