@@ -3,6 +3,22 @@
   "global": {
     "enforce": false
   },
+  "roles": [
+    {
+      "match": {
+        "provider": "*-supervisor"
+      },
+      "role": "supervisor"
+    },
+    {
+      "match": {
+        "labels": {
+          "team-role": "lead"
+        }
+      },
+      "role": "lead"
+    }
+  ],
   "projects": {
     "prj-example": {
       "set": "careful",

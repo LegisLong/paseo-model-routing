@@ -2,7 +2,7 @@
   "name": "model-routing",
   "private": true,
   "license": "MIT",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Paseo plugin: provider, model and effort tables per tier, assigned to workspaces and projects, with an optional guard on agent creation.",
   "repository": {
     "type": "git",

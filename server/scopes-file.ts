@@ -54,6 +54,7 @@ export function renderScopes(scopes: Scopes): string {
   const ordered: Scopes = {
     version: 1,
     global: { enforce: scopes.global.enforce },
+    ...(scopes.roles !== undefined ? { roles: scopes.roles } : {}),
     projects: sortedRecord(scopes.projects),
     workspaces: sortedRecord(scopes.workspaces),
   };
@@ -106,14 +107,6 @@ export function hasEnforcement(scopes: Scopes): boolean {
     Object.values(scopes.projects).some((entry) => entry.enforce) ||
     Object.values(scopes.workspaces).some((entry) => entry.enforce)
   );
-}
-
-/** Supervisor creates Leads, Lead creates Peers; any other parent is not routed. */
-export function roleForParentProvider(provider: string | null | undefined): Role | null {
-  if (!provider) return null;
-  if (provider.endsWith("-supervisor")) return "lead";
-  if (provider.endsWith("-lead")) return "peer";
-  return null;
 }
 
 export function roleRoutes(preset: Preset, role: Role): Route[] {

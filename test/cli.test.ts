@@ -57,7 +57,7 @@ describe("routing resolve", () => {
       scopes,
       routing,
       projectId: "p1",
-      parentProvider: "example-lead",
+      parent: { provider: "example-lead" },
     });
     assert.equal(decision.kind, "allow");
   });

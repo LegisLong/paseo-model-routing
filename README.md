@@ -20,8 +20,8 @@ were made from an outdated table.
   A save is refused when the file changed since it was loaded. See [First run](#first-run).
 - **Guard.** In a scope where an assignment has `enforce: true`, a Supervisor creating a Lead,
   or a Lead creating a Peer, must pass the current `routing-rev` label for the role's rows.
-  Otherwise the creation is refused with the current rows and the label to add. Roles come from
-  provider-id suffixes (`-supervisor`, `-lead`); see [the guard](#the-guard-behavior-and-limits).
+  Otherwise the creation is refused with the current rows and the label to add. Which agents count as
+  Supervisor or Lead is set by [role rules](#agent-roles-who-the-guard-applies-to).
 - **CLI.** `bin/routing.mjs` prints the effective set for a workspace or project, and edits one
   row with a revision check. It is for source checkouts only (see below).
 
@@ -39,7 +39,7 @@ were made from an outdated table.
 From Git, pinned to a release tag:
 
 ```
-paseo plugin add git:Meron-Labs/paseo-model-routing --ref v0.1.0
+paseo plugin add git:Meron-Labs/paseo-model-routing --ref v0.2.0
 paseo plugin ls
 ```
 
@@ -120,14 +120,15 @@ PASEO_MODEL_ROUTING_SCOPES_FILE=/path/to/model-routing/examples/model-routing-sc
 node /path/to/model-routing/bin/routing.mjs resolve --workspace ws-example --project prj-example --role peer
 ```
 
-Output (formatted for reading; the CLI prints one line):
+Output (formatted for reading; the CLI prints one line; revisions are shortened with `…`, and they are
+hashes of the file bytes, so a checkout that converts line endings to CRLF prints other values):
 
 ```
 {"set":"fast","source":{"kind":"workspace","id":"ws-example"},"enforced":true,"rev":"e9bbd91d6885","role":"peer",
  "target":{"kind":"workspace","id":"ws-example","via":"flag"},
  "routes":[{"tier":"routine","provider":"example-peer","model":"model-small","effort":"low","note":""},
            {"tier":"review","provider":"","model":"","effort":"","note":"two models of different families"}],
- "revisions":{"routing":"1a3719cd01c2…","scopes":"32b2f0a25c99…"}}
+ "revisions":{"routing":"1a3719cd01c2…","scopes":"0c86ae927bb8…"}}
 ```
 
 A refused edit:
@@ -149,14 +150,53 @@ in workspace B. The guard checks the child's actual workspace when the creation 
 targets only the workspace or project you pass. Nothing in either path forces a model: the guard checks
 the revision label, and the child's model is whatever the creator requested.
 
+## Agent roles (who the guard applies to)
+
+The guard needs to know which creating agent is a Supervisor (creates Leads) and which is a Lead
+(creates Peers). You declare that with `roles` in `model-routing-scopes.json`, or edit the same list
+in the "Agent roles" panel of the screen. Each rule gives a `match` and a `role`. Rules are checked
+in order and the first match wins. An agent that matches no rule has no role, and its creations are
+always allowed.
+
+```json
+"roles": [
+  { "match": { "provider": "*-supervisor" }, "role": "supervisor" },
+  { "match": { "provider": "claude", "labels": { "team-role": "lead" } }, "role": "lead" }
+]
+```
+
+- `role` is the role of the agent that creates: `supervisor` creates Leads (it gets the rows of the
+  `lead` tier), `lead` creates Peers (it gets all other rows).
+- `match.provider` is the provider id of the creating agent. It matches exactly, or with `*` as a
+  wildcard for any run of characters (`*-lead`). Matching is case-sensitive and anchored.
+- `match.labels` is a set of `key: value` pairs that must all be on the creating agent.
+- When a rule has both, both must match. A `match` with neither is refused on save.
+- **Without `roles`** the default rules apply: `*-supervisor` is a Supervisor and `*-lead` is a Lead,
+  the naming convention of 0.1.0. Existing setups keep working with no change. With `roles` present,
+  even as `[]`, only your rules apply, and `[]` means no agent has a role.
+
+Labels are set when an agent is created or later, with Paseo's own tools:
+
+```
+paseo run --label team-role=lead "<task>"
+paseo agent update <agent-id> --label team-role=lead
+```
+
+An agent can do the same through the `update_agent` tool. The label has to be on the creating agent
+when it creates a child, so set it before the agent starts its work.
+
+The refusal message names the rule that gave the creator its role, for example
+`Creator role: Lead by rule 2 of roles (provider claude, labels team-role=lead)`.
+
+Versions before 0.2.0 do not know `roles`. They read a scopes file that has it as invalid: the screen
+refuses to edit assignments and the guard allows every creation. Remove `roles` or restore a backup of
+the file before going back to such a version.
+
 ## The guard: behavior and limits
 
-- **Roles come from provider ids.** The creator's role is read from the suffix of its provider id:
-  `-supervisor` creates Leads (rows of the `lead` tier), `-lead` creates Peers (all other rows).
-  Any other id, such as `claude` or `codex`, has no role and its creations are always allowed.
-  So the guard does something only when you name your providers with these suffixes (for example
-  custom providers `claude-supervisor` and `claude-lead`). Without them, the plugin is a table
-  editor, a scope assignment screen and a CLI; `enforce` has no effect.
+- **Roles come from your rules** (see above). Without rules, the guard has an effect only if you
+  name providers with the `-supervisor` and `-lead` suffixes. Otherwise the plugin is a table
+  editor and a scope assignment screen, and `enforce` has no effect.
 - It checks one thing: that the creator's `routing-rev` label equals the revision of the role's rows
   in the effective set for the child's workspace. It does not check which model was chosen.
 - It refuses only fresh, interactive creations with a parent in an enforced scope. Other paths

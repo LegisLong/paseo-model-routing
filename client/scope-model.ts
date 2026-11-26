@@ -1,7 +1,7 @@
 import type { ProviderOption, Route, Routing } from "../shared/routing";
 import { PRESET_NAME } from "../shared/routing";
-import type { EffectiveRouting, ScopeKind, Scopes, ScopesState } from "../shared/scopes";
-import { resolveEffective, setInUseMessage } from "../shared/scopes";
+import type { EffectiveRouting, RoleRule, ScopeKind, Scopes, ScopesState } from "../shared/scopes";
+import { DEFAULT_ROLE_RULES, resolveEffective, setInUseMessage } from "../shared/scopes";
 
 // Pure helpers for the routing screen: no React, so node --test can run them.
 
@@ -284,4 +284,93 @@ export function addRoute(routing: Routing, set: string, tier: string): Routing {
 
 export function removeRoute(routing: Routing, set: string, tier: string): Routing {
   return mapPreset(routing, set, (routes) => (routes.length > 1 ? routes.filter((route) => route.tier !== tier) : routes));
+}
+
+// ---- agent roles ----
+
+/** Labels as typed: `key=value`, separated by commas. Whitespace around keys and values is ignored. */
+export function parseLabelText(text: string): { labels: Record<string, string>; error: string | null } {
+  const labels: Record<string, string> = {};
+  for (const part of text.split(",")) {
+    const item = part.trim();
+    if (item === "") continue;
+    const at = item.indexOf("=");
+    const key = at < 0 ? "" : item.slice(0, at).trim();
+    const value = at < 0 ? "" : item.slice(at + 1).trim();
+    if (!key || !value) return { labels: {}, error: `"${item}" is not key=value.` };
+    labels[key] = value;
+  }
+  return { labels, error: null };
+}
+
+export function formatLabelText(labels: Record<string, string> | undefined): string {
+  return Object.entries(labels ?? {})
+    .map(([key, value]) => `${key}=${value}`)
+    .join(", ");
+}
+
+/** Why a rule cannot be saved, or null. Mirrors the schema the server enforces. */
+export function ruleProblem(rule: RoleRule): string | null {
+  const hasProvider = rule.match.provider !== undefined && rule.match.provider !== "";
+  if (!hasProvider && Object.keys(rule.match.labels ?? {}).length === 0) return "Needs a provider or at least one label.";
+  return null;
+}
+
+/** First problem among the rules, with its position; null when the scopes can be saved. */
+export function rolesProblem(scopes: Scopes | null): string | null {
+  const rules = scopes?.roles ?? [];
+  for (const [index, rule] of rules.entries()) {
+    const problem = ruleProblem(rule);
+    if (problem) return `Role rule ${index + 1}: ${problem}`;
+  }
+  return null;
+}
+
+/** Start editing: copy the default rules into the file so they can be changed. */
+export function customizeRoles(scopes: Scopes): Scopes {
+  return { ...scopes, roles: DEFAULT_ROLE_RULES.map((rule) => structuredClone(rule)) };
+}
+
+/** Back to the default rules: drop `roles` from the file. */
+export function useDefaultRoles(scopes: Scopes): Scopes {
+  const { roles: _roles, ...rest } = scopes;
+  return rest;
+}
+
+export function addRule(scopes: Scopes): Scopes {
+  return { ...scopes, roles: [...(scopes.roles ?? []), { match: {}, role: "lead" }] };
+}
+
+export function removeRule(scopes: Scopes, index: number): Scopes {
+  return { ...scopes, roles: (scopes.roles ?? []).filter((_, at) => at !== index) };
+}
+
+export function moveRule(scopes: Scopes, index: number, by: -1 | 1): Scopes {
+  const rules = [...(scopes.roles ?? [])];
+  const target = index + by;
+  if (target < 0 || target >= rules.length) return scopes;
+  [rules[index], rules[target]] = [rules[target], rules[index]];
+  return { ...scopes, roles: rules };
+}
+
+/** Replace one rule. An empty provider or empty labels leave the key out, as the file would. */
+export function changeRule(
+  scopes: Scopes,
+  index: number,
+  change: { provider?: string; labels?: Record<string, string>; role?: RoleRule["role"] },
+): Scopes {
+  const rules = (scopes.roles ?? []).map((rule, at) => {
+    if (at !== index) return rule;
+    const match = { ...rule.match };
+    if (change.provider !== undefined) {
+      if (change.provider === "") delete match.provider;
+      else match.provider = change.provider;
+    }
+    if (change.labels !== undefined) {
+      if (Object.keys(change.labels).length === 0) delete match.labels;
+      else match.labels = change.labels;
+    }
+    return { match, role: change.role ?? rule.role };
+  });
+  return { ...scopes, roles: rules };
 }

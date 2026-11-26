@@ -3,9 +3,10 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { PluginHookContext } from "@getpaseo/plugin/server";
 import type { Route, Routing } from "../shared/routing";
-import type { EffectiveRouting, Role, RoleView, Scopes } from "../shared/scopes";
+import type { EffectiveRouting, RoleAssignment, RoleSubject, RoleView, Scopes } from "../shared/scopes";
+import { assignRole, describeAssignment } from "../shared/scopes";
 import { parseRouting } from "./routing-file";
-import { hasEnforcement, readScopesFile, resolveEffective, roleForParentProvider, roleView } from "./scopes-file";
+import { hasEnforcement, readScopesFile, resolveEffective, roleView } from "./scopes-file";
 
 // Freshness guard for agent creation by a Supervisor (creates Leads) or a Lead (creates Peers).
 // A creation in an enforcing scope must carry label `routing-rev` equal to the revision of the
@@ -77,7 +78,8 @@ export type GuardFacts = {
   scopes: Scopes | null;
   routing: Routing | null;
   projectId: string | null;
-  parentProvider: string | null;
+  /** The creating agent's provider and labels; null when it could not be found. */
+  parent: RoleSubject | null;
 };
 
 /** Cheap gate checked before any I/O: only a fresh interactive creation with a parent is guarded. */
@@ -99,13 +101,14 @@ export function guardDecision(facts: GuardFacts): GuardDecision {
   if (!facts.routing) return allow("routing unavailable");
   const effective = resolveEffective(facts.scopes, facts.routing, facts.request.workspaceId, facts.projectId);
   if (!effective.enforced || !effective.set) return allow(effective.error ?? "scope not enforced");
-  const role = roleForParentProvider(facts.parentProvider);
-  if (!role) return allow(`parent provider ${facts.parentProvider ?? "unknown"} has no routing role`);
+  const assignment = assignRole(facts.scopes.roles, facts.parent);
+  if (!assignment) return allow(`parent ${facts.parent?.provider ?? "unknown"} matches no role rule`);
+  const role = assignment.role;
   const view = roleView(facts.routing, effective.set, role);
   if (!view) return allow(`set ${effective.set} has no ${role} rows`);
   const given = facts.request.labels[ROUTING_REV_LABEL];
   if (given === view.revision) return allow("revision current");
-  return { kind: "reject", message: rejectMessage(effective, facts.projectId, view, given) };
+  return { kind: "reject", message: rejectMessage(effective, facts.projectId, view, given, assignment) };
 }
 
 function short(value: string, max: number): string {
@@ -124,13 +127,20 @@ function scopeText(effective: EffectiveRouting, projectId: string | null): strin
   return projectId ? `global (project ${projectId})` : "global";
 }
 
-function rejectMessage(effective: EffectiveRouting, projectId: string | null, view: RoleView, given: string | undefined): string {
+function rejectMessage(
+  effective: EffectiveRouting,
+  projectId: string | null,
+  view: RoleView,
+  given: string | undefined,
+  assignment: RoleAssignment,
+): string {
   const label = JSON.stringify({ [ROUTING_REV_LABEL]: view.revision });
   const stale = given ? `label routing-rev ${short(given, 20)} is out of date` : "label routing-rev is missing";
   const roleName = view.role === "lead" ? "Lead" : "Peer";
   return (
     `Paseo model-routing plugin refused this agent creation (owner-configured freshness check). Nothing was created. ` +
     `Reason: ${stale}. ` +
+    `Creator role: ${describeAssignment(assignment)}. ` +
     `Scope ${scopeText(effective, projectId)}, set ${effective.set}, rev ${view.revision}. ` +
     `${roleName} routes: ${view.routes.map(routeText).join("; ")}. ` +
     `Retry the same call with labels ${label} added (keep your other labels). ` +
@@ -186,7 +196,7 @@ export function createRoutingGuard(options: GuardOptions) {
       scopes: scopesFile.scopes,
       routing: null,
       projectId: null,
-      parentProvider: null,
+      parent: null,
     };
     if (!facts.scopes || !hasEnforcement(facts.scopes)) return guardDecision(facts);
     facts.routing = parseRouting(await readFile(options.routingFile, "utf8"));
@@ -204,7 +214,7 @@ export function createRoutingGuard(options: GuardOptions) {
 
     const parentId = request.labels[PARENT_AGENT_ID_LABEL].trim();
     const parent = await paseo.agents.ref(parentId).refresh();
-    facts.parentProvider = parent?.agent.provider ?? null;
+    facts.parent = parent ? { provider: parent.agent.provider ?? null, labels: parent.agent.labels ?? {} } : null;
     return guardDecision(facts);
   }
 

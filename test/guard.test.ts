@@ -41,7 +41,7 @@ function facts(patch: Partial<GuardFacts> & { labels?: Record<string, string> } 
     scopes: enforcing,
     routing,
     projectId: "p1",
-    parentProvider: "example-lead",
+    parent: { provider: "example-lead" },
     ...rest,
   };
 }
@@ -65,16 +65,16 @@ describe("guardDecision", () => {
   });
 
   test("Supervisor creating a Lead gets the lead view", () => {
-    const decision = guardDecision(facts({ parentProvider: "example-supervisor" }));
+    const decision = guardDecision(facts({ parent: { provider: "example-supervisor" } }));
     assert.equal(decision.kind, "reject");
     if (decision.kind === "reject") {
       assert.ok(decision.message.includes(`rev ${leadRev}`));
       assert.match(decision.message, /Lead routes: lead=example-lead model-large-5-5 high\./);
     }
-    const ok = guardDecision(facts({ parentProvider: "example-supervisor", labels: { [ROUTING_REV_LABEL]: leadRev } }));
+    const ok = guardDecision(facts({ parent: { provider: "example-supervisor" }, labels: { [ROUTING_REV_LABEL]: leadRev } }));
     assert.equal(ok.kind, "allow");
     // A Peer revision does not satisfy the Lead view.
-    assert.equal(guardDecision(facts({ parentProvider: "example-supervisor", labels: { [ROUTING_REV_LABEL]: peerRev } })).kind, "reject");
+    assert.equal(guardDecision(facts({ parent: { provider: "example-supervisor" }, labels: { [ROUTING_REV_LABEL]: peerRev } })).kind, "reject");
   });
 
   test("current revision is allowed", () => {
@@ -89,15 +89,15 @@ describe("guardDecision", () => {
     ["no parent label", { ...facts(), request: { ...facts().request, labels: {} } }],
     ["blank parent label", { ...facts(), request: { ...facts().request, labels: { [PARENT_AGENT_ID_LABEL]: " " } } }],
     ["reopen (not fresh)", facts({ fresh: false })],
-    ["peer parent", facts({ parentProvider: "example-peer" })],
-    ["non-role parent", facts({ parentProvider: "example" })],
-    ["unknown parent", facts({ parentProvider: null })],
+    ["peer parent", facts({ parent: { provider: "example-peer" } })],
+    ["non-role parent", facts({ parent: { provider: "example" } })],
+    ["unknown parent", facts({ parent: null })],
     ["no scopes file content", facts({ scopes: null })],
     ["no enforcing entry", facts({ scopes: EMPTY_SCOPES })],
     ["routing unreadable", facts({ routing: null })],
     ["other project", facts({ projectId: "p2" })],
     ["workspace opt-out", { ...facts(), request: { ...facts().request, workspaceId: "wOut" } }],
-    ["set without lead row", facts({ parentProvider: "example-supervisor", scopes: { ...EMPTY_SCOPES, projects: { p1: { set: "economy", enforce: true } } } })],
+    ["set without lead row", facts({ parent: { provider: "example-supervisor" }, scopes: { ...EMPTY_SCOPES, projects: { p1: { set: "economy", enforce: true } } } })],
     ["dangling set", facts({ scopes: { ...EMPTY_SCOPES, projects: { p1: { set: "gone", enforce: true } } } })],
   ];
   for (const [name, input] of allowed) {
@@ -136,7 +136,7 @@ describe("hook wrappers", () => {
 
   type Paseo = Parameters<ReturnType<typeof createRoutingGuard>["checkOpen"]>[1]["paseo"];
   type Lookup<T> = () => Promise<T>;
-  function fakePaseo(parent: Lookup<{ agent: { provider: string } } | null>, workspace: Lookup<{ projectId: string } | null>) {
+  function fakePaseo(parent: Lookup<{ agent: { provider: string; labels?: Record<string, string> } } | null>, workspace: Lookup<{ projectId: string } | null>) {
     const calls: string[] = [];
     const paseo = {
       agents: { ref: (id: string) => ({ refresh: () => (calls.push(`agent:${id}`), parent()) }) },
@@ -210,6 +210,19 @@ describe("hook wrappers", () => {
     const { paseo, calls } = fakePaseo(lead, inP1);
     await assert.rejects(guard.checkOpen(created(guard), { paseo }), /Scope workspace w1/);
     assert.deepEqual(calls, ["agent:parent"]);
+    await writeFile(scopesFile, renderScopes(enforcing));
+  });
+
+  test("a label rule reads the parent's labels through agents.ref().refresh()", async () => {
+    const rules = [{ match: { provider: "plain", labels: { "team-role": "lead" } }, role: "lead" as const }];
+    await writeFile(scopesFile, renderScopes({ ...enforcing, roles: rules }));
+    const guard = setup();
+    const labelled = () => Promise.resolve({ agent: { provider: "plain", labels: { "team-role": "lead" } } });
+    const unlabelled = () => Promise.resolve({ agent: { provider: "plain", labels: {} } });
+    await assert.rejects(guard.checkOpen(created(guard), { paseo: fakePaseo(labelled, inP1).paseo }), /Creator role: Lead by rule 1 of roles/);
+    await guard.checkOpen(created(guard), { paseo: fakePaseo(unlabelled, inP1).paseo });
+    // With roles in the file the default suffix rules no longer apply.
+    await guard.checkOpen(created(guard), { paseo: fakePaseo(lead, inP1).paseo });
     await writeFile(scopesFile, renderScopes(enforcing));
   });
 

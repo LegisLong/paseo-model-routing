@@ -10,6 +10,7 @@ import type { Scopes, ScopesState, SetOp } from "../shared/scopes";
 import { manageSetRpc, readScopesRpc, saveScopesRpc } from "../shared/scopes";
 import { Assignments } from "./assignments";
 import { MissingFile } from "./missing-file";
+import { RolesPanel } from "./roles-panel";
 import type { Snapshot } from "./scope-model";
 import {
   draftStatus,
@@ -17,6 +18,7 @@ import {
   isStaleError,
   nameScopeRefs,
   providersLoading,
+  rolesProblem,
   setInUseText,
   staleSaveMessage,
 } from "./scope-model";
@@ -109,7 +111,9 @@ function ScreenBody({ narrow }: { narrow: boolean }) {
   const editName = draft && editing && names.includes(editing) ? editing : draft?.active ?? "";
   const globalChanged = draft?.active !== routingDraft.base.value?.active;
   const anyDirty = routingDraft.dirty || scopesDraft.dirty;
-  const saveable = (routingDraft.dirty && !routingDraft.stale) || (scopesDraft.dirty && !scopesDraft.stale);
+  const rolesBlock = scopesDraft.dirty ? rolesProblem(scopes) : null;
+  const saveable =
+    !rolesBlock && ((routingDraft.dirty && !routingDraft.stale) || (scopesDraft.dirty && !scopesDraft.stale));
 
   /** A refusal as the owner should read it: stale writes explain what was kept, scope ids become names. */
   function explain(error: unknown, keptEdits: boolean): string {
@@ -295,6 +299,7 @@ function ScreenBody({ narrow }: { narrow: boolean }) {
           />
         </View>
         {saveError && !refusalInBanner ? <Message text={`Not saved: ${saveError}`} /> : null}
+        {rolesBlock ? <Message text={`Fix before saving: ${rolesBlock}`} /> : null}
       </View>
 
       <ScrollView
@@ -352,18 +357,20 @@ function ScreenBody({ narrow }: { narrow: boolean }) {
           ) : null}
 
           {draft && scopes ? (
-            <Assignments
-              style={narrow ? { alignSelf: "stretch" } : { width: 440 }}
-              state={scopesState}
-              saved={scopesDraft.base.value ?? scopes}
-              scopes={scopes}
-              sets={names}
-              globalSet={draft.active}
-              globalChanged={globalChanged}
-              version={`${routingState.revision}:${scopesState.revision}`}
-              onChange={scopesDraft.setDraft}
-              files={[routingState.path, scopesState.path]}
-            />
+            <View style={narrow ? { alignSelf: "stretch", gap: 14 } : { width: 440, gap: 14 }}>
+              <Assignments
+                state={scopesState}
+                saved={scopesDraft.base.value ?? scopes}
+                scopes={scopes}
+                sets={names}
+                globalSet={draft.active}
+                globalChanged={globalChanged}
+                version={`${routingState.revision}:${scopesState.revision}`}
+                onChange={scopesDraft.setDraft}
+                files={[routingState.path, scopesState.path]}
+              />
+              <RolesPanel scopes={scopes} onChange={scopesDraft.setDraft} />
+            </View>
           ) : null}
         </View>
       </ScrollView>

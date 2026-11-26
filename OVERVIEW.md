@@ -14,7 +14,9 @@ A Model routing screen in the sidebar edits both files. Model and effort choices
 
 The guard is off until you turn on `enforce` for a workspace or a project on the screen. In such a scope, a Supervisor creating a Lead, or a Lead creating a Peer, must pass the current `routing-rev` label for the role's rows. Otherwise the creation is refused, and the refusal lists the current rows and the label to add.
 
-Roles come from a naming convention. The guard takes the role from the provider id of the creating agent: an id ending in `-supervisor` is a Supervisor, and one ending in `-lead` is a Lead. Any other provider id, such as plain `claude` or `codex`, has no role, and the guard lets its creations through. The guard therefore has an effect only if you name your providers with these suffixes, for example custom providers `claude-supervisor` and `claude-lead`. Without them the plugin is a routing table editor and a screen for assigning sets to workspaces and projects.
+You declare which agents are Supervisors and Leads with role rules, in the Agent roles panel of the screen. A rule matches the creating agent by provider id (exact, or with `*` wildcards) and/or by labels that must all be present, and gives it the role `supervisor` or `lead`. The first matching rule wins, and an agent that matches none has no role, so the guard lets its creations through. For example, a rule for provider `claude` with the label `team-role=lead` makes only the Claude agents you labelled that way Leads. Labels are set with `paseo run --label` when an agent is created, or with `paseo agent update --label` later.
+
+Without any rules the plugin applies two defaults: a provider id ending in `-supervisor` is a Supervisor and one ending in `-lead` is a Lead. If you name your providers that way you need to configure nothing. Choosing "Customize" copies these two rules into the file for editing, and from then on only your rules apply.
 
 The guard checks that the creator read the current table. It does not check which model was chosen, so it is a freshness check and not a policy. It lets a creation through when anything inside the guard fails or takes longer than 3 seconds. Resumes, reopens and creations without a parent are never refused. Global enforcement is not available in this version.
 
@@ -22,9 +24,9 @@ The guard checks that the creator read the current table. It does not check whic
 
 1. Open Model routing in the sidebar. On a daemon with no routing file, the screen shows the path it looks for and a button that creates a starting file with one set and one tier. It never overwrites an existing file.
 2. Choose providers and models for the tiers, then save. Model and effort choices follow the catalogue each provider reports.
-3. Optionally assign sets to workspaces or projects and turn on `enforce` where you want the guard, if your providers follow the naming above.
+3. Optionally assign sets to workspaces or projects, declare which agents are Supervisors and Leads in the Agent roles panel (or rely on the default suffix rules), and turn on `enforce` where you want the guard.
 
-Requires Paseo 0.16.2 or later. This release was run on Paseo 0.17.4.
+Requires Paseo 0.16.2 or later. This release was run on Paseo 0.17.4. Versions before 0.2.0 cannot read a scopes file that has role rules.
 
 ## Files and access
 

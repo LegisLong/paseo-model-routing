@@ -6,13 +6,12 @@ import { join } from "node:path";
 import { after, describe, test } from "node:test";
 import type { Routing } from "../shared/routing";
 import type { Scopes } from "../shared/scopes";
-import { MISSING_SCOPES_REVISION } from "../shared/scopes";
+import { assignRole, MISSING_SCOPES_REVISION } from "../shared/scopes";
 import { parseRouting } from "../server/routing-file";
 import {
   EMPTY_SCOPES,
   readScopesFile,
   resolveEffective,
-  roleForParentProvider,
   roleView,
   writeScopesFile,
 } from "../server/scopes-file";
@@ -85,12 +84,13 @@ describe("resolveEffective", () => {
 });
 
 describe("roles and revisions", () => {
-  test("parent provider suffix selects the role being created", () => {
-    assert.equal(roleForParentProvider("example-supervisor"), "lead");
-    assert.equal(roleForParentProvider("example-lead"), "peer");
-    assert.equal(roleForParentProvider("example-peer"), null);
-    assert.equal(roleForParentProvider("example"), null);
-    assert.equal(roleForParentProvider(null), null);
+  test("without roles the default suffix rules apply, as in 0.1.0", () => {
+    const role = (provider: string | null) => assignRole(undefined, { provider })?.role ?? null;
+    assert.equal(role("example-supervisor"), "lead");
+    assert.equal(role("example-lead"), "peer");
+    assert.equal(role("example-peer"), null);
+    assert.equal(role("example"), null);
+    assert.equal(role(null), null);
   });
 
   test("peer view excludes the lead row; lead view is only the lead row", () => {
