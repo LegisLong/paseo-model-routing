@@ -24,7 +24,7 @@ The guard checks that the creator read the current table. It does not check whic
 2. Choose providers and models for the tiers, then save. Model and effort choices follow the catalogue each provider reports.
 3. Optionally assign sets to workspaces or projects and turn on `enforce` where you want the guard, if your providers follow the naming above.
 
-Requires Paseo 0.16.2 or later. It was tested on 0.16.2 and 0.17.4.
+Requires Paseo 0.16.2 or later. This release was run on Paseo 0.17.4.
 
 ## Files and access
 

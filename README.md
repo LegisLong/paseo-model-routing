@@ -27,7 +27,8 @@ were made from an outdated table.
 
 ## Requirements
 
-- Paseo `>=0.16.2` (see `paseo-plugin.json`). Tested on Paseo 0.16.2 and 0.17.4. Earlier versions are not tested.
+- Paseo `>=0.16.2` (see `paseo-plugin.json`). This release was run on Paseo 0.17.4. 0.16.2 is the oldest version an
+  earlier build was run on; it is untested with this release.
 - Node.js with TypeScript type stripping, for the CLI and the tests only (tested on Node 26). The plugin
   itself needs no Node setup beyond the daemon's.
 - The plugin has no runtime dependencies of its own: `@getpaseo/plugin`, `zod`, `react`, `react-native`
@@ -162,8 +163,6 @@ the revision label, and the child's model is whatever the creator requested.
   (resume, reopen, creations without a parent, unenforced scopes) are allowed.
 - It fails open: any internal error or a timeout of 3 seconds lets the creation through.
 - The refusal text names the scope, the set, the revision and the rows, and says that nothing was created.
-- Reloading the plugin drops plugin tools for a session that is mid-turn, until that session's next prompt.
-  Idle sessions keep running.
 - It is a freshness check, not a policy: a creator that reads a current table can still choose any model.
 - Global enforcement is refused in this version. Enforce per workspace or per project.
 
